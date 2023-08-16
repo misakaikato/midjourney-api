@@ -277,6 +277,7 @@ export class Midjourney extends MidjourneyMessage {
 			throw new Error(`CustomApi failed with status ${httpStatus}`);
 		}
 		if (this.wsClient) {
+			// 如果开启是通过
 			return await this.wsClient.waitImageMessage({
 				nonce,
 				loading,
