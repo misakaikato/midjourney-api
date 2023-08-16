@@ -137,6 +137,8 @@ export function custom2Type(custom: string) {
     return "variation";
   } else if (custom.includes("reroll")) {
     return "reroll";
+  } else if (custom.includes("pan")) {
+    return "customPan";
   } else if (custom.includes("CustomZoom")) {
     return "customZoom";
   } else if (custom.includes("Outpaint")) {

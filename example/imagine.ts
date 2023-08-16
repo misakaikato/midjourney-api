@@ -17,7 +17,7 @@ async function main() {
   });
 
   const msg = await client.Imagine(
-    "Red hamster",
+    "cute:: hot:: dog --niji",
     (uri: string, progress: string) => {
       console.log("loading", uri, "progress", progress);
     }
