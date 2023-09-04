@@ -75,14 +75,17 @@ export class Midjourney extends MidjourneyMessage {
 			await this.getWsClient();
 		}
 		const nonce = nextNonce();
-		this.log(`Imagine`, prompt, "nonce", nonce);
+		logger.info(`Imagine`, prompt, "nonce", nonce);
 		const httpStatus = await this.MJApi.ImagineApi(prompt, nonce);
 		if (httpStatus !== 204) {
 			throw new Error(`ImagineApi failed with status ${httpStatus}`);
 		}
+		// 使用 wss
 		if (this.wsClient) {
 			return await this.wsClient.waitImageMessage({ nonce, loading, prompt });
-		} else {
+		} 
+		// 使用轮询
+		else {
 			this.log(`await generate image`);
 			const msg = await this.WaitMessage(prompt, loading);
 			this.log(`image generated`, prompt, msg?.uri);

@@ -13,7 +13,6 @@ type CtxType = {
 
 const loadingHandler = (ctx: CtxType, uri: string, progress: string, seed?: string) => {
 	logger.info(`loading ${uri}, progress ${progress}, seed ${seed}`);
-	// const wss = ctx.wss;
 }
 
 router.get("/", (ctx: CtxType) => {
@@ -92,17 +91,56 @@ router.post("/reroll", async (ctx: CtxType) => {
 	}
 });
 
+function base64ToBlob(base64: string, mimeType: string): Blob {
+	const byteCharacters = atob(base64);
+	const byteArrays = [];
+	for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+		const slice = byteCharacters.slice(offset, offset + 512);
+		const byteNumbers = new Array(slice.length);
+		for (let i = 0; i < slice.length; i++) {
+			byteNumbers[i] = slice.charCodeAt(i);
+		}
+		const byteArray = new Uint8Array(byteNumbers);
+		byteArrays.push(byteArray);
+	}
+	return new Blob(byteArrays, { type: mimeType });
+}
+
+function dataURItoBlob(dataURI: string) {
+    const [header, base64Data] = dataURI.split(',');
+    if (header && base64Data) {
+        const data = atob(base64Data);
+        const mimeType = header.split(':')[1].split(';')[0];
+        let uint8Array = new Uint8Array(data.length);
+        for (let i = 0; i < data.length; ++i) {
+            uint8Array[i] = data.charCodeAt(i);
+        }
+        return new Blob([uint8Array], { type: mimeType });
+    }
+}
 
 router.post("/describe", async (ctx: CtxType) => {
-	let { img } = ctx.request.body
-	logger.info(`[describe] img: ${img}`);
+	let { img, base64, mimeType } = ctx.request.body
+	logger.info(`[describe] img: ${img} ${base64}`);
 	try {
-		const msg = await ctx.mjc.Describe(img as string);
+		let msg: any = null;
+		if (base64 && img) {
+			const blob = dataURItoBlob(img as string);
+			if (blob){
+				msg = await ctx.mjc.DescribeByBlob( blob );
+			}
+			else {
+				throw Error("转换为 Blob 时出现错误");
+			}
+		}
+		else if (img) {
+			msg = await ctx.mjc.Describe(img as string);
+		}
 		ctx.body = msg;
 	}
 	catch (error: any) {
 		logger.error(`error: ${error}`);
-		ctx.body = error;
+		ctx.body = JSON.stringify(error);
 	}
 });
 

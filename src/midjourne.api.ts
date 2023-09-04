@@ -67,11 +67,11 @@ export class MidjourneyApi extends Command {
 				}
 			);
 			if (response.status >= 400) {
-				logger.debug(JSON.stringify(response.json()));
-				console.error("api.error.config", {
-					payload: JSON.stringify(payload),
-					config: this.config,
-				});
+				logger.error(`response.status: ${response.status}, reponse: ${JSON.stringify(response)}`);
+				// logger.error("api.error.config", {
+				// 	payload: JSON.stringify(payload),
+				// 	config: this.config,
+				// });
 			}
 			return response.status;
 		} catch (error) {

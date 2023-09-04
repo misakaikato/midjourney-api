@@ -16,12 +16,3 @@ router.post("/tasklist", (ctx: any)=>{
 router.post("/taskquery", (ctx: any)=>{
 	ctx.body = "Hello World.";
 });
-
-export type TaskDataType = {
-	type: string;
-	status?: "pending" | "processing" | "completed" | "error'";
-	paylaod: any;
-}
-
-export function addTask(data: TaskDataType){
-}

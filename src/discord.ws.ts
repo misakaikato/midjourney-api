@@ -12,6 +12,7 @@ import {
 	MJDescribe,
 } from "./interfaces";
 import { MidjourneyApi } from "./midjourne.api";
+import { logger } from "./server/logger";
 import {
 	content2progress,
 	content2prompt,
@@ -26,23 +27,26 @@ import WebSocket from "isomorphic-ws";
 export class WsMessage {
 	ws: WebSocket;
 	private closed = false;
-	private event: Array<{ event: string; callback: (message: any) => void }> =
-		[];
+	// 事件处理：[{event: "update", callback()}...]
+	private event: Array<{ event: string; callback: (message: any) => void }> = [];
+	// midjourney 消息处理：none-> { ..., onmodel(), ... }
 	private waitMjEvents: Map<string, WaitMjEvent> = new Map();
 	private skipMessageId: string[] = [];
 	private reconnectTime: boolean[] = [];
 	private heartbeatInterval = 0;
 	public UserId = "";
+
 	constructor(public config: MJConfig, public MJApi: MidjourneyApi) {
 		this.ws = new this.config.WebSocket(this.config.WsBaseUrl);
 		this.ws.addEventListener("open", this.open.bind(this));
+		this.onSystem("ready", this.onReady.bind(this));
 		this.onSystem("messageCreate", this.onMessageCreate.bind(this));
 		this.onSystem("messageUpdate", this.onMessageUpdate.bind(this));
 		this.onSystem("messageDelete", this.onMessageDelete.bind(this));
-		this.onSystem("ready", this.onReady.bind(this));
 		this.onSystem("interactionSuccess", this.onInteractionSuccess.bind(this));
 	}
 
+	// 发送心跳包, 间隔 40s
 	private async heartbeat(num: number) {
 		if (this.reconnectTime[num]) return;
 		//check if ws is closed
@@ -51,7 +55,7 @@ export class WsMessage {
 			this.reconnect();
 			return;
 		}
-		this.log("heartbeat", this.heartbeatInterval);
+		logger.info(`heartbeat, ${this.heartbeatInterval}`);
 		this.heartbeatInterval++;
 		this.ws.send(
 			JSON.stringify({
@@ -78,6 +82,7 @@ export class WsMessage {
 
 	async onceReady() {
 		return new Promise((resolve) => {
+			// ready 事件发送
 			this.once("ready", (user) => {
 				//print user nickname
 				console.log(`🎊 ws ready!!! Hi: ${user.global_name}`);
@@ -85,6 +90,7 @@ export class WsMessage {
 			});
 		});
 	}
+
 	//try reconnect
 	reconnect() {
 		if (this.closed) return;
@@ -98,6 +104,7 @@ export class WsMessage {
 		const num = this.reconnectTime.length;
 		this.log("open.time", num);
 		this.reconnectTime.push(false);
+		// 建立连接之后进行认证
 		this.auth();
 		this.ws.addEventListener("message", (event) => {
 			this.parseMessage(event.data as string);
@@ -110,6 +117,7 @@ export class WsMessage {
 			this.reconnectTime[num] = true;
 			this.reconnect();
 		});
+		// 连接建立后 10s 后开始进行心跳
 		setTimeout(() => {
 			this.heartbeat(num);
 		}, 1000 * 10);
@@ -133,14 +141,23 @@ export class WsMessage {
 			})
 		);
 	}
+
 	async timeout(ms: number) {
 		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 	
+	// 消息被创建
 	private async messageCreate(message: any) {
-		const { embeds, id, nonce, components, attachments } = message;
+		const { 
+			embeds, // 是一个数组，包含了消息中的嵌入内容。嵌入是一种特殊类型的消息，可以包含标题、描述、字段、缩略图、图片等。它们用于展示更加丰富和结构化的信息。
+			id, //是消息的唯一标识符。每条消息在 Discord 中都有一个全局唯一的 ID，用于追踪和管理。
+			nonce, // nonce 是一个可选字段，用于验证消息的发送。它是一个用于识别是否同一消息被多次发送的机制。通常，这是一个随机生成的数或字符串。
+			components, //是一个数组，包含了消息中的交互组件。这些可以是按钮、选择菜单等，用于增加用户与机器人的互动。
+			attachments //是一个数组，包含了消息中附加的文件或媒体，比如图片、音频、视频等。这些字段通常都是由 Discord API 提供的，不同的编程库（比如 discord.js、discord.py 等）会以不同的方式来访问这些字段。
+		} = message;
 		if (nonce) {
 			// this.log("waiting start image or info or error");
+			// nonce -> id
 			this.updateMjEventIdByNonce(id, nonce);
 			if (embeds?.[0]) {
 				const { color, description, title } = embeds[0];
@@ -189,8 +206,8 @@ export class WsMessage {
 		this.messageUpdate(message);
 	}
 
+	// 消息被更新
 	private messageUpdate(message: any) {
-		// this.log("messageUpdate", message);
 		const {
 			content,
 			embeds,
@@ -204,6 +221,12 @@ export class WsMessage {
 			const { name } = interaction;
 
 			switch (name) {
+				// case 'imagine': 
+				// 	logger.debug(`imagine-${id}-update`);
+				// 	// this.emit("imagine-processing", message);
+				// 	// id->noce
+				// 	this.emitMJ(id, message);
+				// 	return;
 				case "settings":
 					this.emit("settings", message);
 					return;
@@ -274,15 +297,16 @@ export class WsMessage {
 		}
 		event.onmodal && event.onmodal(nonce, id);
 	}
+
 	private async onReady(user: any) {
 		this.UserId = user.id;
 	}
+
 	private async onMessageCreate(message: any) {
 		const { channel_id, author, interaction } = message;
 		if (channel_id !== this.config.ChannelId) return;
 		if (author?.id !== this.config.BotId) return;
 		if (interaction && interaction.user.id !== this.UserId) return;
-		// this.log("[messageCreate]", JSON.stringify(message));
 		this.messageCreate(message);
 	}
 
@@ -291,9 +315,9 @@ export class WsMessage {
 		if (channel_id !== this.config.ChannelId) return;
 		if (author?.id !== this.config.BotId) return;
 		if (interaction && interaction.user.id !== this.UserId) return;
-		// this.log("[messageUpdate]", JSON.stringify(message));
 		this.messageUpdate(message);
 	}
+
 	private async onMessageDelete(message: any) {
 		const { channel_id, id } = message;
 		if (channel_id !== this.config.ChannelId) return;
@@ -312,11 +336,12 @@ export class WsMessage {
 		}
 		const message = msg.d;
 		if (message.channel_id === this.config.ChannelId) {
-			this.log(data);
+			// 每一步的结果
+			// this.log(data);
+			logger.info(`[message ${msg.t}] id:${msg.d.id}, nonce:${msg.d.nonce}`);
 		}
-		this.log("event", msg.t);
-		// console.log(data);
 		switch (msg.t) {
+			// 与 discord 建立 websocket 连接
 			case "READY":
 				this.emitSystem("ready", message.user);
 				break;
@@ -328,17 +353,19 @@ export class WsMessage {
 				break;
 			case "MESSAGE_DELETE":
 				this.emitSystem("messageDelete", message);
+			case "INTERACTION_CREATE":
+				if (message.nonce) {
+					this.emitSystem("interactionCreate", message);
+				}
+				break;
 			case "INTERACTION_SUCCESS":
 				if (message.nonce) {
 					this.emitSystem("interactionSuccess", message);
 				}
 				break;
-			case "INTERACTION_CREATE":
-				if (message.nonce) {
-					this.emitSystem("interactionCreate", message);
-				}
 		}
 	}
+
 	//continue click appeal or Acknowledged
 	private async continue(message: any) {
 		const { components, id, flags, nonce } = message;
@@ -402,14 +429,15 @@ export class WsMessage {
 		this.emit(event.nonce, eventMsg);
 	}
 
+	// 任务完成
 	private done(message: any) {
 		const { content, id, attachments, components, flags } = message;
 		const { url, proxy_url, width, height } = attachments[0];
 		let uri = url;
+		// 替换图片代理
 		if (this.config.ImageProxy !== "") {
 			uri = uri.replace("https://cdn.discordapp.com/", this.config.ImageProxy);
 		}
-
 		const MJmsg: MJMessage = {
 			id,
 			flags,
@@ -425,6 +453,7 @@ export class WsMessage {
 		this.filterMessages(MJmsg);
 		return;
 	}
+
 	private processingImage(message: any) {
 		const { content, id, attachments, flags } = message;
 		if (!content) {
@@ -457,12 +486,14 @@ export class WsMessage {
 		this.emitImage(event.nonce, eventMsg);
 	}
 
+	// 过滤消息
 	private async filterMessages(MJmsg: MJMessage) {
 		// delay 300ms for discord message delete
 		await this.timeout(300);
+		// 通过 prompt 找到对应的 event.nonce
 		const event = this.getEventByContent(MJmsg.content);
 		if (!event) {
-			this.log("FilterMessages not found", MJmsg, this.waitMjEvents);
+			logger.error(`FilterMessages not found, ${JSON.stringify(MJmsg)}, ${JSON.stringify(this.waitMjEvents)}`);
 			return;
 		}
 		const eventMsg: MJEmit = {
@@ -470,8 +501,16 @@ export class WsMessage {
 		};
 		this.emitImage(event.nonce, eventMsg);
 	}
+
+	// find event by prompt
 	private getEventByContent(content: string) {
 		const prompt = content2prompt(content);
+
+		// logger.debug(`getEventByContent(), ${content}, ${prompt}`)
+		// for (const [key, value] of this.waitMjEvents.entries()) {
+		// 	logger.debug(`getEventByContent() in loop, ${content2prompt(value.prompt as string)}`);
+		// }
+
 		//fist del message
 		for (const [key, value] of this.waitMjEvents.entries()) {
 			if (
@@ -508,31 +547,37 @@ export class WsMessage {
 		let event = this.waitMjEvents.get(nonce);
 		if (!event) return;
 		event.id = id;
-		this.log("updateMjEventIdByNonce success", this.waitMjEvents.get(nonce));
+		// this.log("updateMjEventIdByNonce success", this.waitMjEvents.get(nonce));
 	}
 
 	protected async log(...args: any[]) {
 		this.config.Debug && console.info(...args, new Date().toISOString());
 	}
 
+	// discord 事件被触发, 执行对应函数
 	emit(event: string, message: any) {
 		this.event
 			.filter((e) => e.event === event)
 			.forEach((e) => e.callback(message));
 	}
+
 	private emitImage(type: string, message: MJEmit) {
 		this.emit(type, message);
 	}
+
 	//FIXME: emitMJ rename
 	private emitMJ(id: string, data: any) {
 		const event = this.getEventById(id);
 		if (!event) return;
+		// logger.debug(`emitMJ() ${JSON.stringify(data)}`);
 		this.emit(event.nonce, data);
 	}
 
 	on(event: string, callback: (message: any) => void) {
 		this.event.push({ event, callback });
 	}
+
+	// 设置 discord 事件处理
 	onSystem(
 		event:
 			| "ready"
@@ -545,6 +590,8 @@ export class WsMessage {
 	) {
 		this.on(event, callback);
 	}
+
+	// 触发 discord 事件
 	private emitSystem(
 		type:
 			| "ready"
@@ -557,6 +604,8 @@ export class WsMessage {
 	) {
 		this.emit(type, message);
 	}
+
+	// event 只处理一次
 	once(event: string, callback: (message: any) => void) {
 		const once = (message: any) => {
 			this.remove(event, once);
@@ -564,14 +613,19 @@ export class WsMessage {
 		};
 		this.event.push({ event, callback: once });
 	}
+
+	// 删除事件和回调
 	remove(event: string, callback: (message: any) => void) {
 		this.event = this.event.filter(
 			(e) => e.event !== event && e.callback !== callback
 		);
 	}
+
+	// 删除事件
 	removeEvent(event: string) {
 		this.event = this.event.filter((e) => e.event !== event);
 	}
+
 	//FIXME: USE ONCE
 	onceInfo(callback: (message: any) => void) {
 		const once = (message: any) => {
@@ -580,6 +634,7 @@ export class WsMessage {
 		};
 		this.event.push({ event: "info", callback: once });
 	}
+
 	//FIXME: USE ONCE
 	onceSettings(callback: (message: any) => void) {
 		const once = (message: any) => {
@@ -588,6 +643,7 @@ export class WsMessage {
 		};
 		this.event.push({ event: "settings", callback: once });
 	}
+
 	onceMJ(nonce: string, callback: (data: any) => void) {
 		const once = (message: any) => {
 			this.remove(nonce, once);
@@ -599,25 +655,29 @@ export class WsMessage {
 		this.waitMjEvents.set(nonce, { nonce });
 		this.event.push({ event: nonce, callback: once });
 	}
+
 	private removeSkipMessageId(messageId: string) {
 		const index = this.skipMessageId.findIndex((id) => id !== messageId);
 		if (index !== -1) {
 			this.skipMessageId.splice(index, 1);
 		}
 	}
+
 	private removeWaitMjEvent(nonce: string) {
-		// this.waitMjEvents.delete(nonce);
-		this.waitMjEvents.clear();
+		this.waitMjEvents.delete( nonce );
+		// this.waitMjEvents.clear();
 	}
 
 	onceImage(nonce: string, callback: (data: MJEmit) => void) {
 		const once = (data: MJEmit) => {
 			const { message, error } = data;
 			if (error || (message && message.progress === "done")) {
+				// 指导报错或者结束才会删除当前的事件
 				this.remove(nonce, once);
 			}
 			callback(data);
 		};
+
 		this.event.push({ event: nonce, callback: once });
 	}
 
@@ -628,31 +688,39 @@ export class WsMessage {
 		messageId,
 		loading,
 	}: {
-		nonce: string;
+		nonce: string; // Number once
 		prompt?: string;
 		messageId?: string;
 		onmodal?: OnModal;
 		loading?: LoadingHandler;
 	}) {
 		if (messageId) this.skipMessageId.push(messageId);
+
 		return new Promise<MJMessage | null>((resolve, reject) => {
 			const handleImageMessage = ({ message, error }: MJEmit) => {
+				// logger.debug(`handleImageMessage()-${message}`);
+				// 错误的 message
 				if (error) {
 					this.removeWaitMjEvent(nonce);
 					reject(error);
 					return;
 				}
+				// 完成的 message
 				if (message && message.progress === "done") {
 					this.removeWaitMjEvent(nonce);
 					messageId && this.removeSkipMessageId(messageId);
 					resolve(message);
 					return;
 				}
-				message && loading && loading(message.uri, message.progress || "");
+				// 处理过程中的 message
+				// message && loading && loading(message.uri, message.progress || "");
+				message && loading && loading(message, message.progress || "");
 			};
+
 			this.waitMjEvents.set(nonce, {
 				nonce,
 				prompt,
+				// 只有交互成功后，才会调用 modal 函数
 				onmodal: async (nonce, id) => {
 					if (onmodal === undefined) {
 						// reject(new Error("onmodal is not defined"))
@@ -669,9 +737,14 @@ export class WsMessage {
 					return nonce;
 				},
 			});
+
 			this.onceImage(nonce, handleImageMessage);
+			// this.onceImagineProcessing((message: any)=>{
+			// 	loading(message);
+			// });
 		});
 	}
+
 	async waitDescribe(nonce: string) {
 		return new Promise<MJDescribe | null>((resolve) => {
 			this.onceMJ(nonce, (message) => {
@@ -679,6 +752,7 @@ export class WsMessage {
 			});
 		});
 	}
+
 	async waitShorten(nonce: string) {
 		return new Promise<MJShorten | null>((resolve) => {
 			this.onceMJ(nonce, (message) => {

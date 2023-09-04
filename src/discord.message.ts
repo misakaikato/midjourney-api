@@ -60,7 +60,7 @@ export class MidjourneyMessage {
 		this.config.Debug && console.log(...args, new Date().toISOString());
 	}
 
-	// 处理每一套从 discord 中获得的消息
+	// 处理每一条从 discord 中获得的消息
 	async FilterMessages(
 		timestamp: number,
 		prompt: string,
