@@ -67,13 +67,12 @@ export class Midjourney extends MidjourneyMessage {
 
 	async Imagine(prompt: string, loading?: LoadingHandler) {
 		prompt = prompt.trim();
-		if (!this.config.Ws) {
-			// task id
-			const seed = random(1000000000, 9999999999);
-			prompt = `<<<${seed}>>> ${prompt}`;
-		} else {
+		// task id
+		const seed = random(100000000000, 999999999999);
+		prompt = `<<<${seed}>>> ${prompt}`;
+		if (this.config.Ws) {
 			await this.getWsClient();
-		}
+		} 
 		const nonce = nextNonce();
 		logger.info(`Imagine`, prompt, "nonce", nonce);
 		const httpStatus = await this.MJApi.ImagineApi(prompt, nonce);

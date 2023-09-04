@@ -1,3 +1,7 @@
+/**
+ * 不使用 ws 
+ */
+
 import {
 	DefaultMJConfig,
 	LoadingHandler,
@@ -7,6 +11,7 @@ import {
 } from "./interfaces";
 import { formatOptions, sleep } from "./utils";
 import async from "async";
+
 
 export class MidjourneyMessage {
 	public config: MJConfig;

@@ -1,3 +1,7 @@
+/**
+ * 使用 ws 
+ */
+
 import {
 	MJConfig,
 	WaitMjEvent,
