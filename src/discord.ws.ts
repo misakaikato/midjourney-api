@@ -28,6 +28,7 @@ import {
 } from "./utils";
 import { VerifyHuman } from "./verify.human";
 import WebSocket from "isomorphic-ws";
+
 export class WsMessage {
 	ws: WebSocket;
 	private closed = false;
@@ -42,6 +43,7 @@ export class WsMessage {
 
 	constructor(public config: MJConfig, public MJApi: MidjourneyApi) {
 		this.ws = new this.config.WebSocket(this.config.WsBaseUrl);
+		logger.websocket(`新建连接, BaseUrl: ${this.config.WsBaseUrl}`);
 		this.ws.addEventListener("open", this.open.bind(this));
 		this.onSystem("ready", this.onReady.bind(this));
 		this.onSystem("messageCreate", this.onMessageCreate.bind(this));
@@ -59,7 +61,7 @@ export class WsMessage {
 			this.reconnect();
 			return;
 		}
-		logger.info(`heartbeat, ${this.heartbeatInterval}`);
+		logger.websocket(`heartbeat, ${this.heartbeatInterval}`);
 		this.heartbeatInterval++;
 		this.ws.send(
 			JSON.stringify({
@@ -74,6 +76,7 @@ export class WsMessage {
 	close() {
 		this.closed = true;
 		this.ws.close();
+		logger.websocket("关闭连接");
 	}
 
 	async checkWs() {
@@ -89,7 +92,7 @@ export class WsMessage {
 			// ready 事件发送
 			this.once("ready", (user) => {
 				//print user nickname
-				console.log(`🎊 ws ready!!! Hi: ${user.global_name}`);
+				logger.websocket(`🎊 ws ready!!! Hi: ${user.global_name}`);
 				resolve(this);
 			});
 		});
@@ -101,12 +104,14 @@ export class WsMessage {
 		this.ws = new this.config.WebSocket(this.config.WsBaseUrl);
 		this.heartbeatInterval = 0;
 		this.ws.addEventListener("open", this.open.bind(this));
+		logger.websocket("重新连接");
 	}
 
 	// After opening ws
 	private async open() {
 		const num = this.reconnectTime.length;
-		this.log("open.time", num);
+		logger.websocket(`开启连接, 开启次数: ${num}`);
+		// this.log("open.time", num);
 		this.reconnectTime.push(false);
 		// 建立连接之后进行认证
 		this.auth();
@@ -129,6 +134,7 @@ export class WsMessage {
 
 	// auth
 	private auth() {
+		logger.websocket(`进行认证...`);
 		this.ws.send(
 			JSON.stringify({
 				op: 2,
@@ -304,6 +310,7 @@ export class WsMessage {
 
 	private async onReady(user: any) {
 		this.UserId = user.id;
+		logger.websocket(`连接 ready`);
 	}
 
 	private async onMessageCreate(message: any) {
@@ -311,6 +318,7 @@ export class WsMessage {
 		if (channel_id !== this.config.ChannelId) return;
 		if (author?.id !== this.config.BotId) return;
 		if (interaction && interaction.user.id !== this.UserId) return;
+		logger.websocket(`新建消息[${message.id}]`);
 		this.messageCreate(message);
 	}
 
@@ -319,6 +327,7 @@ export class WsMessage {
 		if (channel_id !== this.config.ChannelId) return;
 		if (author?.id !== this.config.BotId) return;
 		if (interaction && interaction.user.id !== this.UserId) return;
+		logger.websocket(`消息被更新[${message.id}]`);
 		this.messageUpdate(message);
 	}
 
@@ -327,6 +336,7 @@ export class WsMessage {
 		if (channel_id !== this.config.ChannelId) return;
 		for (const [key, value] of this.waitMjEvents.entries()) {
 			if (value.id === id) {
+				logger.websocket(`消息被删除[${message.id}]`);
 				this.waitMjEvents.set(key, { ...value, del: true });
 			}
 		}
@@ -342,7 +352,8 @@ export class WsMessage {
 		if (message.channel_id === this.config.ChannelId) {
 			// 每一步的结果
 			// this.log(data);
-			logger.info(`[message ${msg.t}] id:${msg.d.id}, nonce:${msg.d.nonce}`);
+			// logger.info(`[message ${msg.t}] id:${msg.d.id}, nonce:${msg.d.nonce}`);
+			// return;
 		}
 		switch (msg.t) {
 			// 与 discord 建立 websocket 连接
