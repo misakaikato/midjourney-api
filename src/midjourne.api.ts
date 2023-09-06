@@ -21,6 +21,7 @@ export class MidjourneyApi extends Command {
 	constructor(public config: MJConfig) {
 		super(config);
 	}
+
 	private safeIteractions = (request: any) => {
 		return new Promise<number>((resolve, reject) => {
 			this.queue.push(
@@ -40,6 +41,7 @@ export class MidjourneyApi extends Command {
 			);
 		});
 	};
+
 	private processRequest = async ({
 		request,
 		callback,
@@ -51,7 +53,32 @@ export class MidjourneyApi extends Command {
 		callback(httpStatus);
 		await sleep(this.config.ApiInterval);
 	};
+
 	private queue = async.queue(this.processRequest, 1);
+
+	private async sendMessage(payload: any) {
+		try {
+			const headers = {
+				"Content-Type": "application/json",
+				Authorization: this.config.SalaiToken,
+			};
+			const response = await this.config.fetch(
+				`${this.config.DiscordBaseUrl}/api/v9/channels/${this.config.ChannelId}/messages`,
+				{
+					method: "POST",
+					body: JSON.stringify(payload),
+					headers: headers,
+				}
+			);
+			if (response.status >= 400) {
+				logger.error(`response.status: ${response.status}, reponse: ${JSON.stringify(response)}`);
+			}
+			return response;
+		} catch (error) {
+			console.error(error);
+		}
+	}
+
 	private interactions = async (payload: any) => {
 		try {
 			const headers = {
@@ -75,6 +102,38 @@ export class MidjourneyApi extends Command {
 			return 500;
 		}
 	};
+
+	// 发送消息
+	async sendApi(message: string, files?: { id: number, filename: string, upload_filename: string }[]) {
+		const payload: Record<string, any> = {
+			content: message,
+			channel_id: this.config.ChannelId,
+			type: "0",
+			sticker_ids: [],
+			attachments: []
+		};
+		if (files) {
+			payload.attachments = files.map(file => ({
+				id: file.id,
+				filename: file.filename,
+				uploaded_filename: file.upload_filename
+			}));
+			// payload.attachments.push({
+			// 	id: 0,
+			// 	filename: files?.split("/")[1],
+			// 	uploaded_filename: files
+			// });
+		}
+		const response = await this.sendMessage(payload);
+		if ((response?.status || 200) >= 400) {
+			throw Error(`mssage 发送失败, message: ${message}`);
+		}
+		// // console.log("response", response);
+		// response?.json().then((text) => {
+		// 	console.log("repsonse text", text);
+		// })
+		return response;
+	}
 
 	async ImagineApi(prompt: string, nonce: string = nextNonce()) {
 		const payload = await this.imaginePayload(prompt, nonce);
@@ -357,6 +416,7 @@ export class MidjourneyApi extends Command {
 		return this.safeIteractions(payload);
 	}
 
+
 	/**
 	 *
 	 * @param fileUrl http file path
@@ -386,13 +446,41 @@ export class MidjourneyApi extends Command {
 		return resp;
 	}
 
-	async UploadImageByBole(blob: Blob, filename = nextNonce() + ".png") {
+	async UploadImageByBolb(blob: Blob, filename = nextNonce() + ".png") {
 		const fileData = await blob.arrayBuffer();
 		const mimeType = blob.type;
 		const file_size = fileData.byteLength;
 		if (!mimeType) {
 			throw new Error("Unknown mime type");
 		}
+		const { attachments } = await this.attachments({
+			filename,
+			file_size,
+			id: this.UpId++,
+		});
+		const UploadSlot = attachments[0];
+		await this.uploadImage(UploadSlot, fileData, mimeType);
+		const resp: DiscordImage = {
+			id: UploadSlot.id,
+			filename: UploadSlot.upload_filename.split("/").pop() || "image.png",
+			upload_filename: UploadSlot.upload_filename,
+		};
+		return resp;
+	}
+
+	/**
+	 *
+	 * @param base64 image data by base64 format
+	 * @returns
+	 */
+	async UploadImageByBase64(base64: string, filename = nextNonce() + ".png") {
+		const matches = base64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);
+		if (!matches || matches.length <= 1) {
+			throw new Error("Unknown mime type");
+		}
+		const mimeType = (matches?.[1]) ?? "image/png";
+		const fileData = Buffer.from(base64.split(";base64,")[1], 'base64');
+		const file_size = fileData.byteLength;
 		const { attachments } = await this.attachments({
 			filename,
 			file_size,
