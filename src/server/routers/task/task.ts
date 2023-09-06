@@ -77,7 +77,7 @@ export class Task<DataType extends Record<string, any>> {
         this.timeoutTimer = setTimeout(() => {
             this.timeout(msg, queue);
         }, TIMEOUTLIMIT * 1000);
-        // 调用 midjourney api
+        // 调用真正需要执行的异步函数
         try {
             const msg = await this._execute(this.data);
             this.success(msg, queue);
@@ -124,6 +124,7 @@ export class Task<DataType extends Record<string, any>> {
     }
 
     async fail(msg: any, queue: TaskQueue<DataType>) {
+        console.log("debug, error in fail()", msg);
         this.finishTime = Date.now();
         this.status = "error";
         this.msg = msg;
@@ -142,7 +143,7 @@ export class Task<DataType extends Record<string, any>> {
             startTime: this.startTime,
             finishTime: this.finishTime,
             data: this.data,
-            msg: this.msg,
+            msg: JSON.stringify(this.msg),
         });
     }
 }
