@@ -17,6 +17,14 @@ import { WsMessage } from "./discord.ws";
 import { faceSwap } from "./face.swap";
 import { logger } from "./server/logger";
 
+type TaskMsgType = {
+	msgId: string;
+	hash: string;
+	flags: number;
+	content?: string;
+	loading?: LoadingHandler;
+};
+
 export class Midjourney extends MidjourneyMessage {
 	public config: MJConfig;
 	private wsClient?: WsMessage;
@@ -65,6 +73,36 @@ export class Midjourney extends MidjourneyMessage {
 		return this;
 	}
 
+	// data: base64 | uri | blob
+	async UploadImages(images: (string | Blob)[]) {
+		console.log("in UploadImages, images.length", images.length);
+		// upload images
+		const DcImages: any[] = [];
+		for (const image of images) {
+			let DcImage: any = null;
+			if (image instanceof Blob) { // Blob
+				DcImage = await this.MJApi.UploadImageByBolb(image);
+			}
+			else if (typeof image === "string") {
+				if (image.startsWith("data:")) { // base64
+					DcImage = await this.MJApi.UploadImageByBase64(image);
+				}
+				else { // uri
+					DcImage = await this.MJApi.UploadImageByUri(image);
+				}
+			}
+			if (DcImage) {
+				logger.info(`图片上传成功. ${DcImage.filename}`);
+			}
+			DcImages.push(DcImage);
+		}
+		// send message
+		const response = await this.MJApi.sendApi(`upload image`, DcImages);
+		logger.info(`图片消息发送.`);
+		const json = await response?.json();
+		return json?.attachments.map((attch: any) => ({ url: attch.url, proxy_url: attch.proxy_url })) ?? [];
+	}
+
 	async Imagine(prompt: string, loading?: LoadingHandler) {
 		prompt = prompt.trim();
 		// task id
@@ -72,7 +110,7 @@ export class Midjourney extends MidjourneyMessage {
 		prompt = `<<<${seed}>>> ${prompt}`;
 		if (this.config.Ws) {
 			await this.getWsClient();
-		} 
+		}
 		const nonce = nextNonce();
 		logger.info(`Imagine`, prompt, "nonce", nonce);
 		const httpStatus = await this.MJApi.ImagineApi(prompt, nonce);
@@ -82,7 +120,7 @@ export class Midjourney extends MidjourneyMessage {
 		// 使用 wss
 		if (this.wsClient) {
 			return await this.wsClient.waitImageMessage({ nonce, loading, prompt });
-		} 
+		}
 		// 使用轮询
 		else {
 			this.log(`await generate image`);
@@ -170,7 +208,21 @@ export class Midjourney extends MidjourneyMessage {
 		return wsClient.waitContent("prefer-remix");
 	}
 
-	async Describe(imgUri: string) {
+	async Describe(image: string | Blob) {
+		if (image instanceof Blob) {
+			return this.DescribeByBlob(image);
+		}
+		else if (typeof image === "string") {
+			if (image.startsWith("data:")) {
+				return this.DescribeByBase64(image);
+			}
+			else {
+				return this.DescribeUri(image);
+			}
+		}
+	}
+
+	async DescribeUri(imgUri: string) {
 		const wsClient = await this.getWsClient();
 		const nonce = nextNonce();
 		const DcImage = await this.MJApi.UploadImageByUri(imgUri);
@@ -182,10 +234,22 @@ export class Midjourney extends MidjourneyMessage {
 		return wsClient.waitDescribe(nonce);
 	}
 
+	async DescribeByBase64(base64: string) {
+		const wsClient = await this.getWsClient();
+		const nonce = nextNonce();
+		const DcImage = await this.MJApi.UploadImageByBase64(base64);
+		this.log(`Describe`, DcImage);
+		const httpStatus = await this.MJApi.DescribeApi(DcImage, nonce);
+		if (httpStatus !== 204) {
+			throw new Error(`DescribeApi failed with status ${httpStatus}`);
+		}
+		return wsClient.waitDescribe(nonce);
+	}
+
 	async DescribeByBlob(blob: Blob) {
 		const wsClient = await this.getWsClient();
 		const nonce = nextNonce();
-		const DcImage = await this.MJApi.UploadImageByBole(blob);
+		const DcImage = await this.MJApi.UploadImageByBolb(blob);
 		this.log(`Describe`, DcImage);
 		const httpStatus = await this.MJApi.DescribeApi(DcImage, nonce);
 		if (httpStatus !== 204) {
@@ -204,21 +268,7 @@ export class Midjourney extends MidjourneyMessage {
 		return wsClient.waitShorten(nonce);
 	}
 
-	async Variation({
-		index,
-		msgId,
-		hash,
-		content,
-		flags,
-		loading,
-	}: {
-		index: 1 | 2 | 3 | 4;
-		msgId: string;
-		hash: string;
-		content?: string;
-		flags: number;
-		loading?: LoadingHandler;
-	}) {
+	async Variation({ index, msgId, hash, content, flags, loading }: TaskMsgType & { index: 1 | 2 | 3 | 4 }) {
 		return await this.Custom({
 			customId: `MJ::JOB::variation::${index}::${hash}`,
 			msgId,
@@ -228,21 +278,7 @@ export class Midjourney extends MidjourneyMessage {
 		});
 	}
 
-	async Upscale({
-		index,
-		msgId,
-		hash,
-		content,
-		flags,
-		loading,
-	}: {
-		index: 1 | 2 | 3 | 4;
-		msgId: string;
-		hash: string;
-		content?: string;
-		flags: number;
-		loading?: LoadingHandler;
-	}) {
+	async Upscale({ index, msgId, hash, content, flags, loading }: TaskMsgType & { index: 1 | 2 | 3 | 4 }) {
 		return await this.Custom({
 			customId: `MJ::JOB::upsample::${index}::${hash}`,
 			msgId,
@@ -252,19 +288,7 @@ export class Midjourney extends MidjourneyMessage {
 		});
 	}
 
-	async Custom({
-		msgId,
-		customId,
-		content,
-		flags,
-		loading,
-	}: {
-		msgId: string;
-		customId: string;
-		content?: string;
-		flags: number;
-		loading?: LoadingHandler;
-	}) {
+	async Custom({ msgId, customId, content, flags, loading }: Omit<TaskMsgType, "hash"> & { customId: string }) {
 		if (this.config.Ws) {
 			await this.getWsClient();
 		}
@@ -279,7 +303,6 @@ export class Midjourney extends MidjourneyMessage {
 			throw new Error(`CustomApi failed with status ${httpStatus}`);
 		}
 		if (this.wsClient) {
-			// 如果开启是通过
 			return await this.wsClient.waitImageMessage({
 				nonce,
 				loading,
@@ -347,21 +370,7 @@ export class Midjourney extends MidjourneyMessage {
 		return await this.WaitMessage(content, loading);
 	}
 
-	async ZoomOut({
-		level,
-		msgId,
-		hash,
-		content,
-		flags,
-		loading,
-	}: {
-		level: "high" | "low" | "2x" | "1.5x";
-		msgId: string;
-		hash: string;
-		content?: string;
-		flags: number;
-		loading?: LoadingHandler;
-	}) {
+	async ZoomOut({ level, msgId, hash, content, flags, loading }: TaskMsgType & { level: "high" | "low" | "2x" | "1.5x" }) {
 		let customId: string;
 		switch (level) {
 			case "high":
@@ -386,45 +395,19 @@ export class Midjourney extends MidjourneyMessage {
 		});
 	}
 
-	async Pan({
-		direction,
-		prompt,
-		msgId,
-		hash,
-		flags,
-		loading,
-	}: {
-		direction: "left" | "right" | "up" | "down";
-		prompt?: string;
-		msgId: string;
-		hash: string;
-		flags: number;
-		loading?: LoadingHandler;
-	}) {
-		// let customId = `MJ::PanModal::${direction}::${hash}`;
+	// feature
+	async Pan({ direction, content, msgId, hash, flags, loading, }: TaskMsgType & { direction: "left" | "right" | "up" | "down" }) {
 		let customId = `MJ::JOB::pan_${direction}::1::${hash}::SOLO`;
 		return this.Custom({
 			msgId,
 			customId,
-			content: `${prompt} --pan_${direction} 2`,
+			content,
 			flags,
 			loading,
 		});
 	}
 
-	async Reroll({
-		msgId,
-		hash,
-		content,
-		flags,
-		loading,
-	}: {
-		msgId: string;
-		hash: string;
-		content?: string;
-		flags: number;
-		loading?: LoadingHandler;
-	}) {
+	async Reroll({ msgId, hash, content, flags, loading, }: TaskMsgType) {
 		return await this.Custom({
 			customId: `MJ::JOB::reroll::0::${hash}::SOLO`,
 			msgId,
@@ -442,7 +425,7 @@ export class Midjourney extends MidjourneyMessage {
 		const res = await app.changeFace(Target, Source);
 		this.log(res[0]);
 		const blob = await base64ToBlob(res[0] as string);
-		const DcImage = await this.MJApi.UploadImageByBole(blob);
+		const DcImage = await this.MJApi.UploadImageByBolb(blob);
 		const nonce = nextNonce();
 		const httpStatus = await this.MJApi.DescribeApi(DcImage, nonce);
 		if (httpStatus !== 204) {
