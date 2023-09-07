@@ -103,10 +103,10 @@ export class Midjourney extends MidjourneyMessage {
 		return json?.attachments.map((attch: any) => ({ url: attch.url, proxy_url: attch.proxy_url })) ?? [];
 	}
 
-	async Imagine(prompt: string, loading?: LoadingHandler) {
+	async Imagine(prompt: string, loading?: LoadingHandler, seed?: string) {
 		prompt = prompt.trim();
 		// task id
-		const seed = random(100000000000, 999999999999);
+		// const seed = random(100000000000, 999999999999);
 		prompt = `<<<${seed}>>> ${prompt}`;
 		if (this.config.Ws) {
 			await this.getWsClient();
@@ -370,7 +370,7 @@ export class Midjourney extends MidjourneyMessage {
 		return await this.WaitMessage(content, loading);
 	}
 
-	async ZoomOut({ level, msgId, hash, content, flags, loading }: TaskMsgType & { level: "high" | "low" | "2x" | "1.5x" }) {
+	async ZoomOut({ level, msgId, hash, content, flags, loading }: TaskMsgType & { level: "high" | "low" | "2x" | "1.5x" | "square" }) {
 		let customId: string;
 		switch (level) {
 			case "high":
@@ -384,6 +384,9 @@ export class Midjourney extends MidjourneyMessage {
 				break;
 			case "1.5x":
 				customId = `MJ::Outpaint::75::1::${hash}::SOLO`;
+				break;
+			case "square":
+				customId = `MJ::Outpaint::100::1::${hash}::SOLO`;
 				break;
 		}
 		return this.Custom({

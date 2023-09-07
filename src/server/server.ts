@@ -10,6 +10,8 @@ import WS = require('ws')
 const http = require('http');
 import { base64ToBlob } from "../utils";
 
+const WS_PROXY = true;
+
 const proxyFetch: FetchFn = async (
 	input: RequestInfo | URL,
 	init?: RequestInit | undefined
@@ -97,19 +99,33 @@ async function sleep(time: number) {
 
 async function AppInitial(app: any) {
 	if (!app.context.mjc) {
-		const client = new Midjourney({
-			ServerId: <string>process.env.SERVER_ID,
-			ChannelId: <string>process.env.CHANNEL_ID,
-			SalaiToken: <string>process.env.SALAI_TOKEN,
-			Debug: true,
-			Ws: true,
-			fetch: proxyFetch,
-			WebSocket: ProxyWebSocket as typeof WebSocket,
-		});
-		// retry
-		// await async_retry(3, client.init())
-		await client.init();
-		app.context.mjc = client;
+
+		if (WS_PROXY) {
+			const client = new Midjourney({
+				ServerId: <string>process.env.SERVER_ID,
+				ChannelId: <string>process.env.CHANNEL_ID,
+				SalaiToken: <string>process.env.SALAI_TOKEN,
+				Debug: true,
+				Ws: true,
+				fetch: proxyFetch,
+				WebSocket: ProxyWebSocket as typeof WebSocket,
+			});
+			// retry
+			// await async_retry(3, client.init())
+			await client.init();
+			app.context.mjc = client;
+		}
+		else {
+			const client = new Midjourney({
+				ServerId: <string>process.env.SERVER_ID,
+				ChannelId: <string>process.env.CHANNEL_ID,
+				SalaiToken: <string>process.env.SALAI_TOKEN,
+				Debug: true,
+				Ws: true,
+			});
+			await client.init();
+			app.context.mjc = client;
+		}
 	}
 }
 
@@ -162,7 +178,7 @@ class ImagineTask extends RemoteTask<IOSocketType, Record<string, any>>{
 		return this.wss.data.mjc.Imagine(prompt, (message: any, progress: string, seed?: string) => {
 			logger.debug(`in ImagineTask, execute ${progress}`);
 			this.processing(message, taskqueue);
-		});
+		}, this.id);
 	}
 }
 
@@ -270,7 +286,7 @@ app.listen(10089, async () => {
 			logger.info(`server socket 接收到 SubmitTask, ${type}`);
 
 			const id = generateRandomDigits(12);
-			
+
 			taskArgs.id = id;
 
 			if (type === "shorten") {

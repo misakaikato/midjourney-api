@@ -16,6 +16,8 @@ import { Command } from "./command";
 import async from "async";
 import { logger } from "./server/logger";
 
+import { Retry } from "./utils/decorators";
+
 export class MidjourneyApi extends Command {
 	UpId = Date.now() % 10; // upload id
 	constructor(public config: MJConfig) {
@@ -42,13 +44,7 @@ export class MidjourneyApi extends Command {
 		});
 	};
 
-	private processRequest = async ({
-		request,
-		callback,
-	}: {
-		request: any;
-		callback: (any: any) => void;
-	}) => {
+	private processRequest = async ({ request, callback }: { request: any; callback: (any: any) => void; }) => {
 		const httpStatus = await this.interactions(request);
 		callback(httpStatus);
 		await sleep(this.config.ApiInterval);
@@ -79,7 +75,8 @@ export class MidjourneyApi extends Command {
 		}
 	}
 
-	private interactions = async (payload: any) => {
+	@Retry(3)
+	private async interactions(payload: any){
 		try {
 			const headers = {
 				"Content-Type": "application/json",
@@ -211,6 +208,7 @@ export class MidjourneyApi extends Command {
 		});
 	}
 
+	// 似乎经常返回 500 错误
 	async CustomApi({
 		msgId,
 		customId,
