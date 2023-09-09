@@ -18,9 +18,17 @@ export function Retry(retryCount: number = 3): MethodDecorator {
                     }
                     return await originalMethod.apply(this, args);
                 } catch (error) {
+                    let error_info = "";
+                    if (error instanceof Error){
+                        error_info = `${error.message}, ${error.stack}`;
+                    }
+                    else {
+                        error_info = JSON.stringify( error );
+                    }
+                    logger.warn(`[Retry] 发送错误，进行尝试，错误信息：${error_info}`)
                     if (i === retryCount - 1) {
                         throw new RetryError(
-                            `Method ${String(propertyKey)} failed after ${retryCount} retries.`,
+                            `Method ${String(propertyKey)} failed after ${retryCount} retries. Error info: ${error_info}`,
                         );
                     }
                 }
