@@ -3,7 +3,10 @@ import { randomUUID } from "crypto";
 export type TaskType = "Imagine" | "Upscale" | "Variation" | "Pan" | "ZoomOut" | "Reroll" | "Describe" | "Blend";
 export type TaskStatusType = 
     "uncreate" | 
-    "queuing" |
+    "queuing-local" |
+    "submited-mj" |
+    "pending-mj" |
+    "processing-mj" |
     "pending" | 
     "processing" | 
     "completed" | 
@@ -17,7 +20,7 @@ export type TaskArgs = {
     data?: any;
 }
 
-export const TIMEOUTLIMIT: number = 100; //s
+export const TIMEOUTLIMIT: number = 300; //s
 
 import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from "./socket";
 import type { Server, Socket } from "socket.io";
