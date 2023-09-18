@@ -16,6 +16,7 @@ import {
 import { WsMessage } from "./discord.ws";
 import { faceSwap } from "./face.swap";
 import { logger } from "./server/logger";
+import { Retry } from "./utils/retry";
 
 type TaskMsgType = {
 	msgId: string;
@@ -59,6 +60,7 @@ export class Midjourney extends MidjourneyMessage {
 		return this;
 	}
 
+	@Retry(3)
 	async init() {
 		await this.Connect();
 		const settings = await this.Settings();
@@ -256,6 +258,28 @@ export class Midjourney extends MidjourneyMessage {
 			throw new Error(`DescribeApi failed with status ${httpStatus}`);
 		}
 		return wsClient.waitDescribe(nonce);
+	}
+
+	async Blend(images: string[], dimensions: "1:1" | "2:3" | "3:2" = "1:1") {
+		if (images.length >= 2) {
+			if (typeof images?.[0] === "string") {
+				if (images?.[0].startsWith("data:")) {
+					return this.BlendByBase64(images, dimensions);
+				}
+			}
+		}
+	}
+
+	async BlendByBase64(images: string[], dimensions: string = "1:1", loading?: LoadingHandler) {
+		const wsClient = await this.getWsClient();
+		const nonce = nextNonce();
+		const DcImages = await Promise.all(images.map((image, index) => this.MJApi.UploadImageByBase64(image, `图片${index + 1}.png`)));
+		this.log(`Blend`, DcImages);
+		const httpStatus = await this.MJApi.BlendApi(DcImages, dimensions, nonce);
+		if (httpStatus !== 204) {
+			throw new Error(`BlendApi failed with status ${httpStatus}`);
+		}
+		return await wsClient.waitImageMessage({ nonce, loading });
 	}
 
 	async Shorten(prompt: string) {

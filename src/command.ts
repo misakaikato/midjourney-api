@@ -18,6 +18,9 @@ export const Commands = [
 	"shorten",
 	"subscribe",
 ] as const;
+
+import { Retry } from "./utils/retry";
+
 export type CommandName = (typeof Commands)[number];
 function getCommandName(name: string): CommandName | undefined {
 	for (const command of Commands) {
@@ -35,6 +38,7 @@ export class Command {
 		if (this.cache[name] !== undefined) {
 			return this.cache[name];
 		}
+
 		if (this.config.ServerId) {
 			const command = await this.getCommand(name);
 			this.cache[name] = command;
@@ -43,6 +47,8 @@ export class Command {
 		this.allCommand();
 		return this.cache[name];
 	}
+
+	@Retry(3)
 	async allCommand() {
 		const searchParams = new URLSearchParams({
 			type: "1",
@@ -65,6 +71,7 @@ export class Command {
 		}
 	}
 
+	@Retry(3)
 	async getCommand(name: CommandName) {
 		const searchParams = new URLSearchParams({
 			type: "1",
@@ -116,6 +123,7 @@ export class Command {
 		]);
 		return this.data2Paylod(data, nonce);
 	}
+
 	async infoPayload(nonce?: string) {
 		const data = await this.commandData("info");
 		return this.data2Paylod(data, nonce);
@@ -153,6 +161,29 @@ export class Command {
 				},
 			]
 		);
+		return this.data2Paylod(data, nonce);
+	}
+	
+	async blendPayload(images: DiscordImage[], dimensions: string = "1:1", nonce?: string){
+		const data = await this.commandData(
+			"blend",
+			images.map((image: DiscordImage, index: number)=>({
+				type: 11,
+				name: "image" + (index + 1),
+				value: index
+			})),
+			images.map((image: DiscordImage, index: number)=>({
+				id: String( index ),
+				filename: image.filename,
+				uploaded_filename: image.upload_filename,
+			})),
+		);
+		data.options.push({
+			type: 3,
+			name: "dimensions",
+			value: "--ar " + dimensions,
+		});
+		console.log("Blend payload", data);
 		return this.data2Paylod(data, nonce);
 	}
 

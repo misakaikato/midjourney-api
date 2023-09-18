@@ -16,7 +16,7 @@ import { Command } from "./command";
 import async from "async";
 import { logger } from "./server/logger";
 
-import { Retry } from "./utils/decorators";
+import { Retry } from "./utils/retry";
 
 export class MidjourneyApi extends Command {
 	UpId = Date.now() % 10; // upload id
@@ -52,52 +52,44 @@ export class MidjourneyApi extends Command {
 
 	private queue = async.queue(this.processRequest, 1);
 
+	@Retry(3)
 	private async sendMessage(payload: any) {
-		try {
-			const headers = {
-				"Content-Type": "application/json",
-				Authorization: this.config.SalaiToken,
-			};
-			const response = await this.config.fetch(
-				`${this.config.DiscordBaseUrl}/api/v9/channels/${this.config.ChannelId}/messages`,
-				{
-					method: "POST",
-					body: JSON.stringify(payload),
-					headers: headers,
-				}
-			);
-			if (response.status >= 400) {
-				logger.error(`response.status: ${response.status}, reponse: ${JSON.stringify(response)}`);
+		const headers = {
+			"Content-Type": "application/json",
+			Authorization: this.config.SalaiToken,
+		};
+		const response = await this.config.fetch(
+			`${this.config.DiscordBaseUrl}/api/v9/channels/${this.config.ChannelId}/messages`,
+			{
+				method: "POST",
+				body: JSON.stringify(payload),
+				headers: headers,
 			}
-			return response;
-		} catch (error) {
-			console.error(error);
+		);
+		if (response.status >= 400) {
+			logger.error(`response.status: ${response.status}, reponse: ${JSON.stringify(response)}`);
 		}
+		return response;
 	}
 
 	@Retry(3)
-	private async interactions(payload: any){
-		try {
-			const headers = {
-				"Content-Type": "application/json",
-				Authorization: this.config.SalaiToken,
-			};
-			const response = await this.config.fetch(
-				`${this.config.DiscordBaseUrl}/api/v9/interactions`,
-				{
-					method: "POST",
-					body: JSON.stringify(payload),
-					headers: headers,
-				}
-			);
-			if (response.status >= 400) {
-				logger.error(`response.status: ${response.status}, reponse: ${JSON.stringify(response)}`);
+	private async interactions(payload: any) {
+		const headers = {
+			"Content-Type": "application/json",
+			Authorization: this.config.SalaiToken,
+		};
+		const response = await this.config.fetch(
+			`${this.config.DiscordBaseUrl}/api/v9/interactions`,
+			{
+				method: "POST",
+				body: JSON.stringify(payload),
+				headers: headers,
 			}
-			return response.status;
-		} catch (error) {
-			console.error(error);
-			return 500;
+		);
+		if (response.status >= 400) {
+			logger.error(`response.status: ${response.status}, reponse: ${JSON.stringify(response)}`);
 		}
+		return response.status;
 	};
 
 	// 发送消息
@@ -209,6 +201,7 @@ export class MidjourneyApi extends Command {
 	}
 
 	// 似乎经常返回 500 错误
+	@Retry(3)
 	async CustomApi({
 		msgId,
 		customId,
@@ -497,6 +490,7 @@ export class MidjourneyApi extends Command {
 	/**
 	 * prepare an attachement to upload an image.
 	 */
+	@Retry(3)
 	private async attachments(
 		...files: UploadParam[]
 	): Promise<{ attachments: UploadSlot[] }> {
@@ -522,6 +516,7 @@ export class MidjourneyApi extends Command {
 		throw new Error(error);
 	}
 
+	@Retry(3)
 	private async uploadImage(
 		slot: UploadSlot,
 		data: ArrayBuffer,
@@ -546,6 +541,12 @@ export class MidjourneyApi extends Command {
 		const payload = await this.describePayload(image, nonce);
 		return this.safeIteractions(payload);
 	}
+
+	async BlendApi(images: DiscordImage[], dimensions: string = "1:1", nonce?: string) {
+		const payload = await this.blendPayload(images, dimensions, nonce);
+		return this.safeIteractions(payload);
+	}
+
 	async upImageApi(image: DiscordImage, nonce?: string) {
 		const { SalaiToken, DiscordBaseUrl, ChannelId, fetch } = this.config;
 		const payload = {

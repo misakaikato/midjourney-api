@@ -1,5 +1,22 @@
 import { logger } from "../server/logger";
 
+export function retryFunctor(fn: (args?: any) => any, maxTimes: number) {
+	return (args?: any) => {
+		for (let i = 1; i <= maxTimes; i++) {
+			try {
+				return fn(args);
+			}
+			catch (error: any) {
+                logger.warn(`重试第${i}次`);
+				if (i === maxTimes){
+					throw Error("touch max retry times.");
+				}
+				continue;
+			}
+		}
+	}
+}
+
 export class RetryError extends Error {
     constructor(message: string) {
         super(message);

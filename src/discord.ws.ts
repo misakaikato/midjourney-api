@@ -28,6 +28,7 @@ import {
 } from "./utils";
 import { VerifyHuman } from "./verify.human";
 import WebSocket from "isomorphic-ws";
+import { retryFunctor } from "./utils/retry";
 
 export class WsMessage {
 	ws: WebSocket;
@@ -42,8 +43,11 @@ export class WsMessage {
 	public UserId = "";
 
 	constructor(public config: MJConfig, public MJApi: MidjourneyApi) {
-		this.ws = new this.config.WebSocket(this.config.WsBaseUrl);
 		logger.websocket(`新建连接, BaseUrl: ${this.config.WsBaseUrl}`);
+		// this.ws = new this.config.WebSocket(this.config.WsBaseUrl);
+		this.ws = retryFunctor(()=>{
+			return new this.config.WebSocket(this.config.WsBaseUrl);
+		}, 3) ();
 		this.ws.addEventListener("open", this.open.bind(this));
 		this.onSystem("ready", this.onReady.bind(this));
 		this.onSystem("messageCreate", this.onMessageCreate.bind(this));
@@ -402,6 +406,7 @@ export class WsMessage {
 			}
 		}
 	}
+
 	private async verifyHuman(message: any) {
 		const { HuggingFaceToken } = this.config;
 		if (HuggingFaceToken === "" || !HuggingFaceToken) {
@@ -501,19 +506,22 @@ export class WsMessage {
 		this.emitImage(event.nonce, eventMsg);
 	}
 
-	// 过滤消息
+	// 任务完成时过滤消息
 	private async filterMessages(MJmsg: MJMessage) {
 		// delay 300ms for discord message delete
 		await this.timeout(300);
 		// 通过 prompt 找到对应的 event.nonce
 		const event = this.getEventByContent(MJmsg.content);
+
 		if (!event) {
 			logger.error(`FilterMessages not found, ${JSON.stringify(MJmsg)}, ${JSON.stringify(this.waitMjEvents)}`);
 			return;
 		}
+
 		const eventMsg: MJEmit = {
 			message: MJmsg,
 		};
+
 		this.emitImage(event.nonce, eventMsg);
 	}
 
@@ -713,7 +721,6 @@ export class WsMessage {
 
 		return new Promise<MJMessage | null>((resolve, reject) => {
 			const handleImageMessage = ({ message, error }: MJEmit) => {
-				// logger.debug(`handleImageMessage()-${message}`);
 				// 错误的 message
 				if (error) {
 					this.removeWaitMjEvent(nonce);
@@ -728,7 +735,6 @@ export class WsMessage {
 					return;
 				}
 				// 处理过程中的 message
-				// message && loading && loading(message.uri, message.progress || "");
 				message && loading && loading(message, message.progress || "");
 			};
 
@@ -754,9 +760,6 @@ export class WsMessage {
 			});
 
 			this.onceImage(nonce, handleImageMessage);
-			// this.onceImagineProcessing((message: any)=>{
-			// 	loading(message);
-			// });
 		});
 	}
 

@@ -6,6 +6,7 @@ import { router as extension_router } from "./routers/extension";
 import { FetchFn } from "../interfaces";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "isomorphic-ws";
+
 import WS = require('ws')
 const http = require('http');
 import { base64ToBlob } from "../utils";
@@ -47,47 +48,16 @@ import { createServer } from "http";
 const httpServer = createServer(app.callback());
 
 import { RemoteSocket, Server, Socket } from "socket.io";
+
 const io = new Server(httpServer, {
 	cors: {
-		origin: "http://127.0.0.1"
+		origin: "*",  // 允许任何来源
+		methods: ["GET", "POST"]
 	}
 });
 
 import { RemoteTask, Task, type TaskArgs } from "./routers/task/task";
 const taskqueue = new TaskQueue({ concurrentTaskCount: 3 });
-
-function retry(count: number, func: any, ...args: any) {
-	for (let i = 0; i < count; i++) {
-		try {
-			const rst = func(...args);
-			return rst;
-		}
-		catch (error: any) {
-			logger.error(JSON.stringify(error));
-			continue;
-		}
-	}
-	logger.error(`RETRY MAX`);
-	throw Error("retry touch max number.");
-}
-
-async function async_retry(count: number, func: any, ...args: any) {
-	let lastError: any = null;
-	for (let i = 0; i < count; i++) {
-		try {
-			const rst = await func(...args);
-			logger.debug(`rst!!!`);
-			return rst;
-		}
-		catch (error: any) {
-			logger.error(error);
-			lastError = error;
-			continue;
-		}
-	}
-	logger.error(`RETRY MAX ${JSON.stringify(lastError)}`);
-	throw Error(`retry touch max number. error: ${JSON.stringify(lastError)}`);
-}
 
 async function sleep(time: number) {
 	return new Promise<void>((resolve, reject) => {
@@ -110,8 +80,6 @@ async function AppInitial(app: any) {
 				fetch: proxyFetch,
 				WebSocket: ProxyWebSocket as typeof WebSocket,
 			});
-			// retry
-			// await async_retry(3, client.init())
 			await client.init();
 			app.context.mjc = client;
 		}
@@ -258,6 +226,12 @@ class PanTask extends RemoteTask<IOSocketType, Record<string, any>>{
 	}
 }
 
+class BlendTask extends RemoteTask<IOSocketType, Record<string, any>>{
+	async _execute(data: { images: string[], dimensions?: "1:1" | "2:3" | "3:2" }): Promise<any> {
+		return this.wss.data.mjc.Blend(data.images, data.dimensions ?? "1:1");
+	}
+}
+
 class DescribeTask extends RemoteTask<IOSocketType, Record<string, any>>{
 	async _execute(data: { image: string }): Promise<any> {
 		return this.wss.data.mjc.Describe(data.image);
@@ -273,14 +247,12 @@ function generateRandomDigits(n: number) {
 }
 
 // 设置监听端口
-app.listen(10089, async () => {
-	console.log('app is starting at port i0089');
+app.listen(3000, async () => {
 	await AppInitial(app);
+
 	io.on("connection", async (socket) => {
-
 		socket.data.mjc = app.context.mjc;
-
-		logger.websocket("连接到新的 socket");
+		logger.websocket("连接到新的客户端");
 
 		socket.on("SubmitTask", async (taskArgs: TaskArgs, type: string, callback: (response: any) => void) => {
 			logger.info(`server socket 接收到 SubmitTask, ${type}`);
@@ -294,6 +266,9 @@ app.listen(10089, async () => {
 			}
 			else if (type === "describe") {
 				taskqueue.submitTask(new DescribeTask(taskArgs, socket));
+			}
+			else if (type === "blend") {
+				taskqueue.submitTask(new BlendTask(taskArgs, socket));
 			}
 			else if (type === "uploadImage") {
 				taskqueue.submitTask(new UploadImageTask(taskArgs, socket));
@@ -321,4 +296,4 @@ app.listen(10089, async () => {
 	});
 });
 
-httpServer.listen(13000);
+httpServer.listen(3001);
