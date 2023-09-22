@@ -1,15 +1,5 @@
 import type { Task } from "./task";
 import { logger } from "../../logger";
-import { createClient } from 'redis';
-
-const client = createClient({
-    socket: {
-        host: 'localhost',
-        port: 16379
-    }
-});
-
-client.on('error', err => console.log('Redis Client Error', err));
 
 type TaskQueueArgs = {
     concurrentTaskCount?: number;

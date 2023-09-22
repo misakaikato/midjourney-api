@@ -7,9 +7,9 @@ import { FetchFn } from "../interfaces";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "isomorphic-ws";
 
-import WS = require('ws')
-const http = require('http');
-import { base64ToBlob } from "../utils";
+// import WS = require('ws')
+// const http = require('http');
+// import { base64ToBlob } from "../utils";
 
 const WS_PROXY = true;
 
@@ -17,7 +17,8 @@ const proxyFetch: FetchFn = async (
 	input: RequestInfo | URL,
 	init?: RequestInit | undefined
 ): Promise<Response> => {
-	const agent = new SocksProxyAgent("socks://127.0.0.1:10088", {
+	const agent = new SocksProxyAgent(process.env.SOCKS_PROXY || "", {
+	// const agent = new SocksProxyAgent("socks://127.0.0.1:10088", {
 		keepAlive: true,
 	});
 	if (!init) init = {};
@@ -29,7 +30,8 @@ const proxyFetch: FetchFn = async (
 
 class ProxyWebSocket extends WebSocket {
 	constructor(address: string | URL, options?: WebSocket.ClientOptions) {
-		const agent = new SocksProxyAgent("socks://127.0.0.1:10088", {
+		const agent = new SocksProxyAgent(process.env.SOCKS_PROXY || "", {
+		// const agent = new SocksProxyAgent("socks://127.0.0.1:10088", {
 			keepAlive: true,
 		});
 		if (!options) options = {};
@@ -59,13 +61,13 @@ const io = new Server(httpServer, {
 import { RemoteTask, Task, type TaskArgs } from "./routers/task/task";
 const taskqueue = new TaskQueue({ concurrentTaskCount: 3 });
 
-async function sleep(time: number) {
-	return new Promise<void>((resolve, reject) => {
-		setTimeout(() => {
-			resolve();
-		}, time);
-	});
-}
+// async function sleep(time: number) {
+// 	return new Promise<void>((resolve, reject) => {
+// 		setTimeout(() => {
+// 			resolve();
+// 		}, time);
+// 	});
+// }
 
 async function AppInitial(app: any) {
 	if (!app.context.mjc) {
