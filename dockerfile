@@ -6,16 +6,15 @@ WORKDIR /usr/src/app
 
 # 将 package.json 和 package-lock.json 文件复制到工作目录
 COPY package*.json ./
+COPY yarn.lock ./
 
 # 安装项目依赖
-RUN npm install
+RUN yarn 
 
 # 将必要的文件和目录复制到工作目录
 COPY src ./src
 COPY tsconfig.json tsconfig.json
-
 # 声明暴露的端口
-EXPOSE 3000
 EXPOSE 3001
 
 # 定义启动容器时运行的命令

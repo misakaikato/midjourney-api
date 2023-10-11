@@ -1,4 +1,7 @@
 import { randomUUID } from "crypto";
+import fs from 'fs';
+import path from 'path';
+import https from 'https';
 
 export type TaskType = "Imagine" | "Upscale" | "Variation" | "Pan" | "ZoomOut" | "Reroll" | "Describe" | "Blend";
 export type TaskStatusType = 
@@ -105,13 +108,25 @@ export class Task<DataType extends Record<string, any>> {
             queue.handleTaskProcessing(this.id, msg);
         }
     }
+    async downloadToShareDir(url: string, shareDir: string, filename: string) {
+        const file = fs.createWriteStream(path.join(shareDir, filename));
+        const request = https.get(url, function (response) {
+            response.pipe(file);
+        });
 
+    }
     async success(msg: any, queue: TaskQueue<DataType>) {
         if (this.status !== "timeout") {
             this.finishTime = Date.now();
             this.status = "completed";
             this.msg = msg;
             clearTimeout(this.timeoutTimer);
+            const dir_list = process.env.SHARE_DIR_LIST!.split(',');
+            const shareDir = dir_list[1];
+            const pngURL= msg?.uri;
+            //DOWNLOAD PNG BY URL 
+            await this.downloadToShareDir(pngURL, shareDir,  `${this.id}.png`);
+            logger.debug(`[success] debug, ${this.toJSON()}`);
             this.sendToUser();
             queue.handleTaskCompleted(this.id, msg);
         }
