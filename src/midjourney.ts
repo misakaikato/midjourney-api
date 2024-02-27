@@ -4,7 +4,7 @@ import {
 	MJConfig,
 	MJConfigParam,
 } from "./interfaces";
-import { MidjourneyApi } from "./midjourne.api";
+import { MidjourneyApi } from "./midjourney.api";
 import { MidjourneyMessage } from "./discord.message";
 import {
 	toRemixCustom,
@@ -48,12 +48,13 @@ export class Midjourney extends MidjourneyMessage {
 		if (!this.config.Ws) {
 			return this;
 		}
+		await this.MJApi.allCommand();
 		//if auth failed, will throw error
-		if (this.config.ServerId) {
-			await this.MJApi.getCommand("settings");
-		} else {
-			await this.MJApi.allCommand();
-		}
+		// if (this.config.ServerId) {
+		// 	await this.MJApi.getCommand("settings");
+		// } else {
+		// 	await this.MJApi.allCommand();
+		// }
 		if (this.wsClient) return this;
 		this.wsClient = new WsMessage(this.config, this.MJApi);
 		await this.wsClient.onceReady();

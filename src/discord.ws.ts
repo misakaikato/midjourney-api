@@ -15,7 +15,7 @@ import {
 	MJShorten,
 	MJDescribe,
 } from "./interfaces";
-import { MidjourneyApi } from "./midjourne.api";
+import { MidjourneyApi } from "./midjourney.api";
 import { logger } from "./server/logger";
 import {
 	content2progress,

@@ -17,7 +17,7 @@ const proxyFetch: FetchFn = async (
 	input: RequestInfo | URL,
 	init?: RequestInit | undefined
 ): Promise<Response> => {
-	const agent = new SocksProxyAgent(process.env.SOCKS_PROXY || "", {
+	const agent = new SocksProxyAgent(process.env.SOCKS_PROXY || "socks://127.0.0.1:10088", {
 	// const agent = new SocksProxyAgent("socks://127.0.0.1:10088", {
 		keepAlive: true,
 	});
@@ -30,8 +30,7 @@ const proxyFetch: FetchFn = async (
 
 class ProxyWebSocket extends WebSocket {
 	constructor(address: string | URL, options?: WebSocket.ClientOptions) {
-		const agent = new SocksProxyAgent(process.env.SOCKS_PROXY || "", {
-		// const agent = new SocksProxyAgent("socks://127.0.0.1:10088", {
+		const agent = new SocksProxyAgent(process.env.SOCKS_PROXY || "socks://127.0.0.1:10088", {
 			keepAlive: true,
 		});
 		if (!options) options = {};
@@ -71,7 +70,6 @@ const taskqueue = new TaskQueue({ concurrentTaskCount: 3 });
 
 async function AppInitial(app: any) {
 	if (!app.context.mjc) {
-
 		if (WS_PROXY) {
 			const client = new Midjourney({
 				ServerId: <string>process.env.SERVER_ID,
