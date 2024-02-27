@@ -2,6 +2,9 @@ const Koa = require('koa');
 import { router as midjourney_router } from "./routers/midjourney";
 import { router as task_router } from "./routers/task";
 import { router as extension_router } from "./routers/extension";
+import { router as fileRouter } from "./routers/fileserver";
+// CORS
+import cors from "@koa/cors";
 
 import { FetchFn } from "../interfaces";
 import { SocksProxyAgent } from "socks-proxy-agent";
@@ -96,11 +99,16 @@ async function AppInitial(app: any) {
 		}
 	}
 }
-
+// CORS
+app.use(cors(
+	// ALLOW ALL ORIGINS 
+	{ origin: '*' }
+));
 app.use(BodyParser());
 app.use(midjourney_router.routes());
 app.use(task_router.routes());
 app.use(extension_router.routes());
+app.use(fileRouter.routes());
 
 interface ServerToClientEvents {
 	TaskEvent: (msg: any) => void;
@@ -295,5 +303,6 @@ app.listen(3000, async () => {
 		})
 	});
 });
+
 
 httpServer.listen(3001);
